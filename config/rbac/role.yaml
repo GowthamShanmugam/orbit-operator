@@ -1,0 +1,66 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: orbit-operator
+rules:
+  # -- OrbitInstance CRD --
+  - apiGroups: ["orbit.redhat.com"]
+    resources: ["orbitinstances", "orbitinstances/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+
+  # -- CRD discovery (required by Kopf) --
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+
+  # -- Core resources --
+  - apiGroups: [""]
+    resources:
+      - secrets
+      - configmaps
+      - services
+      - serviceaccounts
+      - pods
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # -- Apps --
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # -- Batch (migration jobs) --
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # -- RBAC (for auth-delegator binding) --
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings", "clusterroles"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # -- Auth-delegator permissions (required to bind system:auth-delegator) --
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["subjectaccessreviews"]
+    verbs: ["create"]
+
+  # -- OpenShift Routes --
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # -- Events (Kopf uses these) --
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # -- Kopf peering / coordination --
+  - apiGroups: ["kopf.dev"]
+    resources: ["clusterkopfpeerings"]
+    verbs: ["get", "list", "watch", "patch"]

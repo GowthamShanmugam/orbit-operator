@@ -1,0 +1,42 @@
+apiVersion: orbit.redhat.com/v1alpha1
+kind: OrbitInstance
+metadata:
+  name: orbit
+  namespace: orbit
+spec:
+  # Authentication -- uses OpenShift's built-in OAuth server by default.
+  # Switch to "rhsso" and add the rhsso block for Red Hat SSO / Keycloak.
+  auth:
+    provider: openshift
+
+  # AI backend -- Vertex AI via GCP Application Default Credentials.
+  # Switch to "anthropic" and provide an anthropicApiKeySecret for direct keys.
+  ai:
+    provider: vertex
+    vertexProjectId: my-gcp-project
+    vertexRegion: us-east5
+    defaultModel: claude-sonnet-4-20250514
+
+  # Container images (override for air-gapped / mirror registries)
+  images:
+    backend: quay.io/gshanmug-quay/orbit-backend:latest
+    frontend: quay.io/gshanmug-quay/orbit-frontend:latest
+
+  # PostgreSQL (pgvector)
+  postgres:
+    storageSize: 10Gi
+
+  # Redis
+  redis:
+    memoryLimit: 256Mi
+
+  # Scaling
+  backend:
+    replicas: 2
+  frontend:
+    replicas: 1
+
+  # GCP service account key (create this Secret beforehand)
+  # oc create secret generic orbit-gcp-sa --from-file=sa-key.json=path/to/key.json
+  gcp:
+    serviceAccountSecret: orbit-gcp-sa

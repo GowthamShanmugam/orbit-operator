@@ -1,0 +1,122 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: orbit-operator.v0.1.0
+  namespace: placeholder
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "orbit.redhat.com/v1alpha1",
+          "kind": "OrbitInstance",
+          "metadata": {
+            "name": "orbit",
+            "namespace": "orbit"
+          },
+          "spec": {
+            "auth": {"provider": "openshift"},
+            "ai": {"provider": "vertex", "vertexProjectId": "my-project", "vertexRegion": "us-east5"},
+            "postgres": {"storageSize": "10Gi"},
+            "backend": {"replicas": 2}
+          }
+        }
+      ]
+spec:
+  displayName: Orbit Operator
+  description: |
+    Deploy and manage Orbit AI IDE platform on OpenShift.
+    Provisions PostgreSQL, Redis, Backend API, Celery workers, and a
+    Frontend with oauth-proxy for seamless SSO via OpenShift OAuth or
+    Red Hat SSO / Keycloak.
+  version: 0.1.0
+  maturity: alpha
+  replaces: ""
+  keywords:
+    - ai
+    - ide
+    - openshift
+    - operator
+  maintainers:
+    - name: Orbit Team
+      email: orbit-dev@example.com
+  provider:
+    name: Orbit
+  labels:
+    name: orbit-operator
+  installModes:
+    - type: OwnNamespace
+      supported: true
+    - type: SingleNamespace
+      supported: true
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+  install:
+    strategy: deployment
+    spec:
+      clusterPermissions:
+        - serviceAccountName: orbit-operator
+          rules:
+            - apiGroups: ["orbit.redhat.com"]
+              resources: ["orbitinstances", "orbitinstances/status"]
+              verbs: ["get", "list", "watch", "patch", "update"]
+            - apiGroups: [""]
+              resources: ["secrets", "configmaps", "services", "serviceaccounts", "pods", "events"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["apps"]
+              resources: ["deployments", "statefulsets"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["batch"]
+              resources: ["jobs"]
+              verbs: ["get", "list", "watch", "create", "delete"]
+            - apiGroups: ["rbac.authorization.k8s.io"]
+              resources: ["clusterrolebindings"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["route.openshift.io"]
+              resources: ["routes"]
+              verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            - apiGroups: ["events.k8s.io"]
+              resources: ["events"]
+              verbs: ["create"]
+            - apiGroups: ["kopf.dev"]
+              resources: ["clusterkopfpeerings"]
+              verbs: ["get", "list", "watch", "patch"]
+      deployments:
+        - name: orbit-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: orbit-operator
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: orbit-operator
+              spec:
+                serviceAccountName: orbit-operator
+                containers:
+                  - name: operator
+                    image: quay.io/gshanmug-quay/orbit-operator:0.1.0
+                    ports:
+                      - containerPort: 8080
+                        name: healthz
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: healthz
+                      initialDelaySeconds: 10
+                      periodSeconds: 30
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 128Mi
+                      limits:
+                        memory: 256Mi
+  customresourcedefinitions:
+    owned:
+      - name: orbitinstances.orbit.redhat.com
+        version: v1alpha1
+        kind: OrbitInstance
+        displayName: Orbit Instance
+        description: Deploys a full Orbit AI IDE stack
