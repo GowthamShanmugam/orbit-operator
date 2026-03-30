@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -20,6 +21,7 @@ from orbit_operator.resources import (
     route,
     secrets,
 )
+from orbit_operator.utils.labels import resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,18 @@ def _apply(api: kubernetes.client.ApiClient, resource: dict, namespace: str) -> 
             if e.status == 404:
                 v1.create_namespaced_config_map(namespace, resource)
                 logger.info("Created ConfigMap %s", name)
+            else:
+                raise
+
+    elif kind == "PersistentVolumeClaim":
+        v1 = kubernetes.client.CoreV1Api(api)
+        try:
+            v1.read_namespaced_persistent_volume_claim(name, namespace)
+            logger.info("PVC %s already exists, skipping (immutable)", name)
+        except kubernetes.client.ApiException as e:
+            if e.status == 404:
+                v1.create_namespaced_persistent_volume_claim(namespace, resource)
+                logger.info("Created PVC %s", name)
             else:
                 raise
 
@@ -182,6 +196,24 @@ def _inject_config_hash(resource: dict, config_hash: str) -> dict:
     return resource
 
 
+def _read_existing_secret_data(
+    api: kubernetes.client.ApiClient,
+    name: str,
+    namespace: str,
+) -> dict[str, str] | None:
+    """Read current Secret data so reconciliation doesn't overwrite stable values."""
+    v1 = kubernetes.client.CoreV1Api(api)
+    secret_name = resource_name(name, "secrets")
+    try:
+        obj = v1.read_namespaced_secret(secret_name, namespace)
+        if obj.data:
+            return {k: base64.b64decode(v).decode() for k, v in obj.data.items()}
+    except kubernetes.client.ApiException as e:
+        if e.status != 404:
+            raise
+    return None
+
+
 def reconcile_all(
     name: str,
     namespace: str,
@@ -193,7 +225,11 @@ def reconcile_all(
     resources: list[dict] = []
 
     # 1. Secrets (must come first -- others reference them)
-    resources.append(secrets.build_app_secret(name, namespace))
+    #    Read existing data so we never overwrite passwords/cookie-secret.
+    existing_secret_data = _read_existing_secret_data(api, name, namespace)
+    resources.append(
+        secrets.build_app_secret(name, namespace, existing_data=existing_secret_data)
+    )
 
     # 2. ConfigMap
     resources.append(configmap.build_configmap(name, namespace, spec))
@@ -210,10 +246,12 @@ def reconcile_all(
     resources.append(redis.build_deployment(name, namespace, spec))
 
     # 6. Backend
+    resources.append(backend.build_pvc(name, namespace, spec))
     resources.append(backend.build_service(name, namespace))
     resources.append(backend.build_deployment(name, namespace, spec))
 
     # 7. Frontend (includes oauth-proxy sidecar)
+    resources.append(frontend.build_nginx_configmap(name, namespace))
     resources.append(frontend.build_service(name, namespace))
     resources.append(frontend.build_deployment(name, namespace, spec))
 

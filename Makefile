@@ -35,7 +35,7 @@ undeploy: ## Remove operator + RBAC + CRD from the cluster
 
 .PHONY: build
 build: ## Build the operator container image
-	podman build -t $(OPERATOR_IMG) -f Containerfile .
+	podman build --platform linux/amd64 -t $(OPERATOR_IMG) -f Containerfile .
 
 .PHONY: push
 push: ## Push the operator container image

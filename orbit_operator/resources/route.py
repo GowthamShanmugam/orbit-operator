@@ -21,6 +21,9 @@ def build_route(name: str, namespace: str, spec: dict) -> dict:
             "name": name,
             "namespace": namespace,
             "labels": standard_labels("route", name),
+            "annotations": {
+                "haproxy.router.openshift.io/timeout": "3000s",
+            },
         },
         "spec": {
             "to": {

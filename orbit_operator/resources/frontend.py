@@ -9,6 +9,55 @@ from orbit_operator.utils.labels import (
 )
 
 
+_NGINX_CONF = """\
+server {{
+    listen 8080;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {{
+        proxy_pass http://{backend_svc}:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+        proxy_set_header X-Forwarded-Email $http_x_forwarded_email;
+        proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
+        proxy_set_header Connection '';
+        proxy_http_version 1.1;
+        chunked_transfer_encoding off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3000s;
+        proxy_send_timeout 3000s;
+    }}
+
+    location / {{
+        try_files $uri $uri/ /index.html;
+    }}
+}}
+"""
+
+
+def build_nginx_configmap(name: str, namespace: str) -> dict:
+    """Build a ConfigMap containing the nginx reverse-proxy config."""
+    rname = resource_name(name, "nginx-config")
+    backend_svc = resource_name(name, "backend")
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": rname,
+            "namespace": namespace,
+            "labels": standard_labels("frontend", name),
+        },
+        "data": {
+            "default.conf.template": _NGINX_CONF.format(backend_svc=backend_svc),
+        },
+    }
+
+
 def _oauth_proxy_args(name: str, spec: dict) -> list[str]:
     """Build the oauth-proxy container args based on auth provider."""
     sa_name = resource_name(name, "proxy")
@@ -21,7 +70,7 @@ def _oauth_proxy_args(name: str, spec: dict) -> list[str]:
         "--tls-cert=/etc/tls/private/tls.crt",
         "--tls-key=/etc/tls/private/tls.key",
         "--cookie-secret-file=/etc/proxy/secrets/cookie-secret",
-        "--cookie-refresh=0h5m0s",
+        "--cookie-refresh=8h0m0s",
         "--pass-access-token=true",
         "--pass-user-headers=true",
         "--pass-basic-auth=false",
@@ -77,6 +126,8 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
         },
     }
 
+    nginx_config_name = resource_name(name, "nginx-config")
+
     frontend_container = {
         "name": "frontend",
         "image": frontend_image,
@@ -85,6 +136,13 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
         "env": [
             {"name": "BACKEND_HOST", "value": backend_svc},
             {"name": "BACKEND_PORT", "value": "8000"},
+        ],
+        "volumeMounts": [
+            {
+                "name": "nginx-config",
+                "mountPath": "/etc/nginx/templates",
+                "readOnly": True,
+            },
         ],
         "resources": {
             "requests": {"cpu": "50m", "memory": "64Mi"},
@@ -116,6 +174,10 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
                         {
                             "name": "proxy-secrets",
                             "secret": {"secretName": secrets_name},
+                        },
+                        {
+                            "name": "nginx-config",
+                            "configMap": {"name": nginx_config_name},
                         },
                     ],
                 },

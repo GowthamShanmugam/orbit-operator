@@ -19,6 +19,9 @@ def build_configmap(name: str, namespace: str, spec: dict) -> dict:
         "CLAUDE_PROVIDER": provider,
         "CLAUDE_DEFAULT_MODEL": ai.get("defaultModel", "claude-sonnet-4-20250514"),
         "CORS_ORIGINS": "*",
+        "NPM_CONFIG_CACHE": "/app/data/.npm",
+        "UV_CACHE_DIR": "/app/data/.uv-cache",
+        "HOME": "/app/data",
     }
 
     if provider == "vertex":

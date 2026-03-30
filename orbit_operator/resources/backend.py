@@ -43,11 +43,37 @@ def _anthropic_env(spec: dict) -> list[dict]:
     ]
 
 
+def build_pvc(name: str, namespace: str, spec: dict) -> dict:
+    """Build a PersistentVolumeClaim for backend data (repos, caches, etc.)."""
+    rname = resource_name(name, "backend-data")
+    backend_spec = spec.get("backend", {})
+    storage = backend_spec.get("dataVolumeSize", "10Gi")
+    storage_class = backend_spec.get("storageClassName")
+
+    pvc: dict = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": rname,
+            "namespace": namespace,
+            "labels": standard_labels("backend", name),
+        },
+        "spec": {
+            "accessModes": ["ReadWriteOnce"],
+            "resources": {"requests": {"storage": storage}},
+        },
+    }
+    if storage_class:
+        pvc["spec"]["storageClassName"] = storage_class
+    return pvc
+
+
 def build_deployment(name: str, namespace: str, spec: dict) -> dict:
     rname = resource_name(name, "backend")
+    pvc_name = resource_name(name, "backend-data")
     images = spec.get("images", {})
     image = images.get("backend", "quay.io/gshanmug-quay/orbit-backend:latest")
-    replicas = spec.get("backend", {}).get("replicas", 2)
+    replicas = spec.get("backend", {}).get("replicas", 1)
 
     labels = standard_labels("backend", name)
     match_labels = selector_labels("backend", name)
@@ -59,7 +85,9 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
         "ports": [{"containerPort": 8000, "name": "http"}],
         "envFrom": env_from_refs(name),
         "env": secret_env_vars(name) + db_url_env_vars(name) + _anthropic_env(spec),
-        "volumeMounts": _gcp_volume_mounts(spec),
+        "volumeMounts": [
+            {"name": "data", "mountPath": "/app/data"},
+        ] + _gcp_volume_mounts(spec),
         "readinessProbe": {
             "httpGet": {"path": "/health", "port": 8000},
             "initialDelaySeconds": 10,
@@ -81,12 +109,18 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
         },
         "spec": {
             "replicas": replicas,
+            "strategy": {"type": "Recreate"},
             "selector": {"matchLabels": match_labels},
             "template": {
                 "metadata": {"labels": labels},
                 "spec": {
                     "containers": [container],
-                    "volumes": _gcp_volumes(spec),
+                    "volumes": [
+                        {
+                            "name": "data",
+                            "persistentVolumeClaim": {"claimName": pvc_name},
+                        },
+                    ] + _gcp_volumes(spec),
                 },
             },
         },
