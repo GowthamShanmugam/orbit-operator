@@ -16,6 +16,7 @@ from orbit_operator.resources import (
     configmap,
     frontend,
     migration,
+    oauth2proxy,
     postgres,
     redis,
     route,
@@ -252,8 +253,14 @@ def reconcile_all(
 
     # 7. Frontend (includes oauth-proxy sidecar)
     resources.append(frontend.build_nginx_configmap(name, namespace))
-    resources.append(frontend.build_service(name, namespace))
+    resources.append(frontend.build_service(name, namespace, spec))
     resources.append(frontend.build_deployment(name, namespace, spec))
+
+    # 8. Standalone oauth2-proxy (RHSSO only)
+    provider = spec.get("auth", {}).get("provider", "openshift")
+    if provider == "rhsso":
+        resources.append(oauth2proxy.build_service(name, namespace))
+        resources.append(oauth2proxy.build_deployment(name, namespace, spec))
 
     # 9. Route
     resources.append(route.build_route(name, namespace, spec))

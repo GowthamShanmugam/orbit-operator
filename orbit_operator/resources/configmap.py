@@ -28,6 +28,9 @@ def build_configmap(name: str, namespace: str, spec: dict) -> dict:
         data["GCP_PROJECT_ID"] = ai.get("vertexProjectId", "")
         data["GCP_REGION"] = ai.get("vertexRegion", "us-east5")
 
+    if spec.get("auth", {}).get("provider") == "rhsso":
+        data["OCP_OAUTH_SIGNOUT_PATH"] = "/oauth2/sign_out"
+
     gcp = spec.get("gcp", {})
     if gcp.get("serviceAccountSecret"):
         data["GOOGLE_APPLICATION_CREDENTIALS"] = "/var/run/secrets/gcp/sa-key.json"

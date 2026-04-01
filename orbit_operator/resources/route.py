@@ -6,13 +6,27 @@ from orbit_operator.utils.labels import resource_name, standard_labels
 
 
 def build_route(name: str, namespace: str, spec: dict) -> dict:
-    """Build a TLS re-encrypt Route pointing to the frontend service.
+    """Build a TLS Route for the OrbitInstance.
 
-    OCP auto-provisions the default *.apps wildcard certificate on the
-    edge, and the service-serving CA provides the backend cert via the
-    serving-cert annotation on the Service.
+    OpenShift provider: re-encrypt Route → frontend Service (ose-oauth-proxy on 8443).
+    RHSSO provider: edge Route → oauth2-proxy Service (plain HTTP on 4180).
     """
-    frontend_svc = resource_name(name, "frontend")
+    provider = spec.get("auth", {}).get("provider", "openshift")
+
+    if provider == "rhsso":
+        target_svc = resource_name(name, "oauth2-proxy")
+        target_port = "http"
+        tls = {
+            "termination": "edge",
+            "insecureEdgeTerminationPolicy": "Redirect",
+        }
+    else:
+        target_svc = resource_name(name, "frontend")
+        target_port = "https"
+        tls = {
+            "termination": "reencrypt",
+            "insecureEdgeTerminationPolicy": "Redirect",
+        }
 
     return {
         "apiVersion": "route.openshift.io/v1",
@@ -28,15 +42,12 @@ def build_route(name: str, namespace: str, spec: dict) -> dict:
         "spec": {
             "to": {
                 "kind": "Service",
-                "name": frontend_svc,
+                "name": target_svc,
                 "weight": 100,
             },
             "port": {
-                "targetPort": "https",
+                "targetPort": target_port,
             },
-            "tls": {
-                "termination": "reencrypt",
-                "insecureEdgeTerminationPolicy": "Redirect",
-            },
+            "tls": tls,
         },
     }

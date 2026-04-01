@@ -186,9 +186,19 @@ def build_deployment(name: str, namespace: str, spec: dict) -> dict:
     }
 
 
-def build_service(name: str, namespace: str) -> dict:
+def build_service(name: str, namespace: str, spec: dict) -> dict:
     rname = resource_name(name, "frontend")
     tls_secret = f"{rname}-tls"
+    provider = spec.get("auth", {}).get("provider", "openshift")
+
+    ports = [{"port": 8443, "targetPort": 8443, "name": "https"}]
+    annotations = {
+        "service.beta.openshift.io/serving-cert-secret-name": tls_secret,
+    }
+
+    if provider == "rhsso":
+        ports.append({"port": 8080, "targetPort": 8080, "name": "http"})
+
     return {
         "apiVersion": "v1",
         "kind": "Service",
@@ -196,18 +206,10 @@ def build_service(name: str, namespace: str) -> dict:
             "name": rname,
             "namespace": namespace,
             "labels": standard_labels("frontend", name),
-            "annotations": {
-                "service.beta.openshift.io/serving-cert-secret-name": tls_secret,
-            },
+            "annotations": annotations,
         },
         "spec": {
             "selector": selector_labels("frontend", name),
-            "ports": [
-                {
-                    "port": 8443,
-                    "targetPort": 8443,
-                    "name": "https",
-                }
-            ],
+            "ports": ports,
         },
     }
