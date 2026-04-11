@@ -1,6 +1,8 @@
 # Orbit Operator for OpenShift
 
-An OpenShift operator that deploys and manages **Orbit** -- an AI-powered IDE platform -- as a fully managed stack on OpenShift Container Platform (OCP).
+Part of [Orbit](https://github.com/GowthamShanmugam/orbit) -- an AI-powered workspace for developers.
+
+An OpenShift operator that deploys and manages Orbit as a fully managed stack on OpenShift Container Platform (OCP).
 
 ## What It Does
 
